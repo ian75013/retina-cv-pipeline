@@ -1,0 +1,660 @@
+\documentclass[11pt,a4paper]{article}
+
+% ── Encodage et langue ──
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+
+% ── Mise en page ──
+\usepackage[margin=2.4cm]{geometry}
+\usepackage{setspace}
+\onehalfspacing
+
+% ── Mathématiques ──
+\usepackage{amsmath,amssymb,amsfonts,mathtools}
+\usepackage{bm}
+
+% ── Algorithmes ──
+\usepackage[ruled,vlined,french,linesnumbered]{algorithm2e}
+
+% ── Figures et couleurs ──
+\usepackage{tikz,pgfplots}
+\pgfplotsset{compat=1.18}
+\usetikzlibrary{arrows.meta,positioning,calc,decorations.pathreplacing,shapes.geometric}
+\usepackage{graphicx}
+\usepackage{xcolor}
+
+% ── Tableaux ──
+\usepackage{booktabs,array,tabularx,colortbl}
+
+% ── Divers ──
+\usepackage{enumitem,fancyhdr,titlesec}
+\usepackage[colorlinks=true,linkcolor=blue!60!black,citecolor=green!50!black,urlcolor=blue!70!black]{hyperref}
+
+% ── Couleurs du document ──
+\definecolor{accent}{HTML}{1A5276}
+\definecolor{mygray}{HTML}{F2F3F4}
+\definecolor{mygreen}{HTML}{27AE60}
+\definecolor{myred}{HTML}{E74C3C}
+\definecolor{myorange}{HTML}{E67E22}
+\definecolor{myblue}{HTML}{2980B9}
+
+% ── En-têtes ──
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textcolor{accent}{\textsc{RetinAI --- Fondements Mathématiques}}}
+\fancyhead[R]{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ── Titres ──
+\titleformat{\section}{\Large\bfseries\color{accent}}{\thesection}{1em}{}[\vspace{-0.5em}\rule{\textwidth}{0.4pt}]
+\titleformat{\subsection}{\large\bfseries\color{accent!80!black}}{\thesubsection}{1em}{}
+
+% ── Boîte de définition ──
+\usepackage{tcolorbox}
+\tcbuselibrary{skins,breakable}
+\newtcolorbox{defbox}[1][]{
+  colback=mygray, colframe=accent, fonttitle=\bfseries,
+  title=#1, breakable, arc=2pt, boxrule=0.8pt
+}
+\newtcolorbox{notebox}[1][]{
+  colback=mygreen!5, colframe=mygreen!70!black, fonttitle=\bfseries,
+  title=#1, breakable, arc=2pt, boxrule=0.6pt
+}
+
+% ── Commandes personnalisées ──
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\N}{\mathbb{N}}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\DeclareMathOperator{\softmax}{softmax}
+\DeclareMathOperator{\sigmoid}{sigmoid}
+\DeclareMathOperator{\ReLU}{ReLU}
+
+% ══════════════════════════════════════════════════════════════
+\begin{document}
+\begin{titlepage}
+\centering
+\vspace*{3cm}
+{\Huge\bfseries\color{accent} RetinAI\par}
+\vspace{0.8cm}
+{\LARGE Fondements Mathématiques et\\Algorithmiques du Pipeline\par}
+\vspace{1.5cm}
+{\large\textit{Analyse détaillée des algorithmes de Computer Vision\\appliqués à la détection de rétinopathie diabétique}\par}
+\vspace{3cm}
+{\large Pipeline ML $\cdot$ TensorFlow $\cdot$ Computer Vision\par}
+\vspace{1cm}
+{\normalsize Mars 2026\par}
+\vfill
+{\small Document pédagogique --- Toutes les notions sont expliquées de zéro.}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+% ══════════════════════════════════════════════════════════════
+\section{Introduction}
+% ══════════════════════════════════════════════════════════════
+
+Ce document présente de manière rigoureuse et pédagogique l'ensemble des algorithmes et fondements mathématiques utilisés dans le pipeline \textbf{RetinAI}. Chaque notion est introduite progressivement, des prérequis de base aux formulations avancées, avec des illustrations et des interprétations intuitives.
+
+Le pipeline couvre quatre grandes familles de techniques :
+
+\begin{enumerate}[leftmargin=2em]
+  \item \textbf{Prétraitement d'images} : transformations pixel-level pour normaliser et rehausser les images rétiniennes.
+  \item \textbf{Réseaux de neurones convolutifs} : architecture profonde pour l'extraction de caractéristiques et la classification.
+  \item \textbf{Fonctions de perte} : objectifs d'optimisation adaptés au déséquilibre de classes.
+  \item \textbf{Optimisation et inférence} : techniques de compression, augmentation à l'inférence et calibration.
+\end{enumerate}
+
+% ══════════════════════════════════════════════════════════════
+\section{Prétraitement des images rétiniennes}
+% ══════════════════════════════════════════════════════════════
+
+\subsection{Espace colorimétrique et représentation des images}
+
+\begin{defbox}[Image numérique]
+Une image couleur est une fonction $I : \{1,\ldots,H\} \times \{1,\ldots,W\} \to \{0,\ldots,255\}^3$ qui associe à chaque pixel $(i,j)$ un triplet $(R,G,B)$ représentant les intensités rouge, verte et bleue. On la représente comme un tenseur $\mathbf{I} \in \R^{H \times W \times 3}$.
+\end{defbox}
+
+L'espace \textbf{LAB} (CIE $L^*a^*b^*$) sépare la luminance $L$ (intensité lumineuse) des composantes chromatiques $a$ (axe vert--rouge) et $b$ (axe bleu--jaune). Cette décomposition est exploitée par le CLAHE pour modifier le contraste sans altérer les couleurs.
+
+\subsection{Normalisation Ben-Graham}
+
+\begin{defbox}[Principe]
+L'illumination non-uniforme dans les images de fond d'œil introduit un biais spatial. La normalisation Ben-Graham supprime cette composante basse fréquence en soustrayant un flou gaussien local.
+\end{defbox}
+
+\subsubsection{Filtre gaussien}
+
+Le noyau gaussien 2D de variance $\sigma^2$ est défini par :
+\begin{equation}
+  G_\sigma(x,y) = \frac{1}{2\pi\sigma^2}\,\exp\!\left(-\frac{x^2+y^2}{2\sigma^2}\right)
+\end{equation}
+
+La convolution de l'image $I$ avec ce noyau produit une version lissée :
+\begin{equation}
+  I_{\text{blur}}(i,j) = (I * G_\sigma)(i,j) = \sum_{m,n} I(i-m,\,j-n)\,G_\sigma(m,n)
+\end{equation}
+
+\subsubsection{Formule de normalisation}
+
+La transformation Ben-Graham s'écrit :
+\begin{equation}
+  \boxed{I_{\text{norm}}(i,j) = \alpha \cdot I(i,j) - \alpha \cdot I_{\text{blur}}(i,j) + \beta}
+\end{equation}
+avec typiquement $\alpha = 4$ et $\beta = 128$. Le terme $\alpha(I - I_{\text{blur}})$ isole les hautes fréquences (vaisseaux, micro-anévrismes, exsudats) tandis que $\beta$ recentre les valeurs.
+
+\begin{notebox}[Intuition]
+Imaginez que vous regardez une photo avec un éclairage inégal (plus clair à gauche qu'à droite). Le flou gaussien capture cette tendance d'éclairage. En la soustrayant, on obtient une image où seuls les \emph{détails} sont visibles, indépendamment de l'illumination.
+\end{notebox}
+
+\subsection{CLAHE --- Contrast Limited Adaptive Histogram Equalization}
+
+\subsubsection{Égalisation d'histogramme classique}
+
+L'histogramme d'une image en niveaux de gris est la distribution des intensités :
+\begin{equation}
+  h(k) = \#\{(i,j) : I(i,j) = k\}, \quad k \in \{0,\ldots,255\}
+\end{equation}
+
+L'égalisation d'histogramme applique la transformation :
+\begin{equation}
+  T(k) = \left\lfloor 255 \cdot \frac{\text{CDF}(k) - \text{CDF}_{\min}}{H \cdot W - \text{CDF}_{\min}} \right\rfloor
+  \quad \text{où} \quad
+  \text{CDF}(k) = \sum_{i=0}^{k} h(i)
+\end{equation}
+
+\subsubsection{Adaptive Histogram Equalization (AHE)}
+
+L'AHE divise l'image en tuiles (grille $M \times N$, typiquement $8 \times 8$) et applique une égalisation locale à chaque tuile. Pour éviter les artefacts aux frontières, les résultats sont interpolés bilinéairement entre tuiles voisines.
+
+\subsubsection{Limitation du contraste (CLAHE)}
+
+L'AHE peut amplifier le bruit dans les régions homogènes. Le CLAHE résout ce problème en \emph{écrêtant} l'histogramme local :
+
+\begin{algorithm}[H]
+\DontPrintSemicolon
+\SetAlgoLined
+\KwIn{Image $I$, grille $M \times N$, seuil de clip $\tau$}
+\KwOut{Image rehaussée $I'$}
+Diviser $I$ en tuiles de taille $\frac{H}{M} \times \frac{W}{N}$\;
+\Pour{chaque tuile $T_{m,n}$}{
+  Calculer l'histogramme local $h_{m,n}$\;
+  $\text{excès} \leftarrow \sum_{k} \max(0,\; h_{m,n}(k) - \tau)$\;
+  Redistribuer l'excès uniformément : $h'_{m,n}(k) \leftarrow \min(h_{m,n}(k),\,\tau) + \frac{\text{excès}}{256}$\;
+  Calculer $\text{CDF}_{m,n}$ à partir de $h'_{m,n}$\;
+}
+\Pour{chaque pixel $(i,j)$}{
+  Identifier les 4 tuiles voisines\;
+  $I'(i,j) \leftarrow$ interpolation bilinéaire des 4 CDF appliquées à $I(i,j)$\;
+}
+\Retour{$I'$}
+\caption{CLAHE}
+\end{algorithm}
+
+Le paramètre $\tau$ (clip limit) contrôle l'amplification maximale du contraste. Une valeur typique est $\tau = 2.0$.
+
+\subsection{Extraction de la ROI circulaire}
+
+Les images de fond d'œil contiennent un disque rétinien sur fond noir. L'extraction consiste à :
+
+\begin{enumerate}
+  \item Seuillage binaire : $B(i,j) = \mathbf{1}[I_{\text{gray}}(i,j) > t]$ avec $t=15$.
+  \item Détection du contour le plus grand (disque rétinien).
+  \item Calcul du cercle englobant minimal $\mathcal{C}(c_x, c_y, r)$ via l'algorithme de Welzl.
+  \item Crop carré centré sur $(c_x, c_y)$ de côté $2(r + m)$ où $m = 0.05 \cdot r$.
+  \item Application d'un masque circulaire binaire.
+\end{enumerate}
+
+% ══════════════════════════════════════════════════════════════
+\section{Réseaux de neurones convolutifs}
+% ══════════════════════════════════════════════════════════════
+
+\subsection{Convolution 2D}
+
+\begin{defbox}[Opération de convolution]
+Soit une entrée $\mathbf{X} \in \R^{H \times W \times C_{\text{in}}}$ et un filtre $\mathbf{W} \in \R^{k \times k \times C_{\text{in}} \times C_{\text{out}}}$. La convolution produit :
+\begin{equation}
+  Y_{i,j,f} = \sum_{c=1}^{C_{\text{in}}} \sum_{m=0}^{k-1} \sum_{n=0}^{k-1} W_{m,n,c,f} \cdot X_{i+m,\,j+n,\,c} + b_f
+\end{equation}
+où $b_f$ est le biais du filtre $f$.
+\end{defbox}
+
+\subsection{Fonctions d'activation}
+
+\paragraph{ReLU.} $\ReLU(x) = \max(0, x)$. Introduit la non-linéarité tout en préservant les gradients pour $x > 0$.
+
+\paragraph{Swish / SiLU.} Utilisée dans EfficientNetV2 :
+\begin{equation}
+  \text{Swish}(x) = x \cdot \sigmoid(\beta x) = \frac{x}{1 + e^{-\beta x}}
+\end{equation}
+avec $\beta = 1$ par défaut. Plus lisse que ReLU, elle permet un flux de gradient non nul pour $x < 0$.
+
+\paragraph{Softmax.} Pour la couche de sortie (classification) :
+\begin{equation}
+  \softmax(z_i) = \frac{e^{z_i}}{\sum_{j=1}^{K} e^{z_j}}, \quad i = 1, \ldots, K
+\end{equation}
+Les sorties forment une distribution de probabilité : $\sum_i \softmax(z_i) = 1$ et $\softmax(z_i) > 0$.
+
+\subsection{Batch Normalization}
+
+Pour chaque mini-batch $\mathcal{B} = \{x_1, \ldots, x_m\}$ :
+\begin{align}
+  \mu_\mathcal{B} &= \frac{1}{m}\sum_{i=1}^{m} x_i & \sigma_\mathcal{B}^2 &= \frac{1}{m}\sum_{i=1}^{m}(x_i - \mu_\mathcal{B})^2 \\[4pt]
+  \hat{x}_i &= \frac{x_i - \mu_\mathcal{B}}{\sqrt{\sigma_\mathcal{B}^2 + \epsilon}} & y_i &= \gamma\,\hat{x}_i + \beta
+\end{align}
+où $\gamma$ et $\beta$ sont des paramètres appris, et $\epsilon \approx 10^{-5}$ assure la stabilité numérique.
+
+\subsection{EfficientNetV2}
+
+\subsubsection{Scaling composé}
+
+EfficientNet utilise un coefficient composé $\phi$ pour mettre à l'échelle simultanément trois dimensions :
+\begin{equation}
+  \text{profondeur} : d = \alpha^\phi, \quad
+  \text{largeur} : w = \beta^\phi, \quad
+  \text{résolution} : r = \gamma^\phi
+\end{equation}
+sous la contrainte $\alpha \cdot \beta^2 \cdot \gamma^2 \approx 2$ (le FLOPS double pour chaque incrément de $\phi$).
+
+\subsubsection{MBConv et Fused-MBConv}
+
+Le bloc fondamental est le \textbf{Mobile Inverted Bottleneck} (MBConv) :
+
+\begin{enumerate}
+  \item \textbf{Expansion} : Conv $1 \times 1$ de $C$ vers $t \cdot C$ canaux (facteur d'expansion $t$).
+  \item \textbf{Depthwise convolution} : Conv $k \times k$ par canal (efficace en calcul).
+  \item \textbf{Squeeze-and-Excitation} : recalibrage des canaux (voir ci-dessous).
+  \item \textbf{Projection} : Conv $1 \times 1$ de $t \cdot C$ vers $C'$ canaux.
+  \item \textbf{Connexion résiduelle} : $\mathbf{y} = \mathbf{x} + \text{MBConv}(\mathbf{x})$ si $C = C'$.
+\end{enumerate}
+
+EfficientNetV2 remplace les premiers blocs MBConv par des blocs \textbf{Fused-MBConv} qui fusionnent l'expansion et la depthwise convolution en une seule Conv $3 \times 3$ standard, plus rapide sur GPU.
+
+\subsubsection{Squeeze-and-Excitation (SE)}
+
+Le module SE recalibre les canaux en fonction de leur importance globale :
+
+\begin{align}
+  \mathbf{s} &= \sigma\!\left(\mathbf{W}_2\,\ReLU\!\left(\mathbf{W}_1\,\text{GAP}(\mathbf{F})\right)\right) \in \R^{C} \\[4pt]
+  \widetilde{\mathbf{F}}_c &= s_c \cdot \mathbf{F}_c
+\end{align}
+
+où $\text{GAP}(\mathbf{F})_c = \frac{1}{HW}\sum_{i,j} F_{i,j,c}$ est le Global Average Pooling, et $\mathbf{W}_1 \in \R^{C/r \times C}$, $\mathbf{W}_2 \in \R^{C \times C/r}$ avec $r$ le ratio de réduction.
+
+\subsection{Module d'attention spatiale (CBAM)}
+
+Le projet ajoute un module CBAM (Convolutional Block Attention Module) entre le backbone et le classifieur. Il combine attention par canal et attention spatiale.
+
+\subsubsection{Attention par canal}
+
+\begin{equation}
+  \mathbf{M}_c(\mathbf{F}) = \sigma\!\Big(\text{MLP}\big(\text{AvgPool}(\mathbf{F})\big) + \text{MLP}\big(\text{MaxPool}(\mathbf{F})\big)\Big)
+\end{equation}
+
+Le MLP partagé a une couche cachée de dimension $C/r$ :
+\begin{equation}
+  \text{MLP}(\mathbf{z}) = \mathbf{W}_2\,\ReLU(\mathbf{W}_1\,\mathbf{z})
+\end{equation}
+
+\subsubsection{Attention spatiale}
+
+Après recalibrage des canaux ($\mathbf{F}' = \mathbf{M}_c \odot \mathbf{F}$) :
+\begin{equation}
+  \mathbf{M}_s(\mathbf{F}') = \sigma\!\Big(f^{7 \times 7}\big([\text{AvgPool}_c(\mathbf{F}');\;\text{MaxPool}_c(\mathbf{F}')]\big)\Big)
+\end{equation}
+
+où $\text{AvgPool}_c$ et $\text{MaxPool}_c$ agrègent le long de la dimension des canaux, et $f^{7 \times 7}$ est une convolution $7 \times 7$.
+
+La sortie finale est :
+\begin{equation}
+  \boxed{\widetilde{\mathbf{F}} = \mathbf{M}_s(\mathbf{F}') \odot \mathbf{F}'}
+\end{equation}
+
+\begin{notebox}[Pourquoi l'attention spatiale en imagerie médicale ?]
+Les lésions de la rétinopathie diabétique (micro-anévrismes, hémorragies, exsudats) sont des structures \emph{localisées}. Le module d'attention spatiale permet au réseau de se focaliser sur ces régions discriminantes plutôt que de traiter uniformément toute l'image.
+\end{notebox}
+
+\subsection{Transfer Learning et Fine-Tuning}
+
+\begin{defbox}[Principe du Transfer Learning]
+Un modèle pré-entraîné sur ImageNet (14M images, 21k classes) a appris des représentations visuelles génériques (contours, textures, formes). Ces représentations sont transférables à de nouvelles tâches avec peu de données.
+\end{defbox}
+
+\paragraph{Phase 1 --- Warmup.} Le backbone est gelé ($\nabla_{\theta_{\text{backbone}}} = \mathbf{0}$). Seul le classifieur est entraîné avec un learning rate élevé ($\eta = 10^{-3}$).
+
+\paragraph{Phase 2 --- Fine-tuning.} Les derniers blocs du backbone sont dégelés. Un learning rate réduit ($\eta = 10^{-4}$) est utilisé pour ajuster finement les features sans détruire les représentations apprises.
+
+% ══════════════════════════════════════════════════════════════
+\section{Fonctions de perte}
+% ══════════════════════════════════════════════════════════════
+
+\subsection{Cross-Entropy catégorielle}
+
+Pour $K$ classes, la Cross-Entropy entre la distribution vraie $\mathbf{y}$ (one-hot) et la distribution prédite $\hat{\mathbf{y}}$ est :
+\begin{equation}
+  \mathcal{L}_{\text{CE}}(\mathbf{y}, \hat{\mathbf{y}}) = -\sum_{k=1}^{K} y_k \log(\hat{y}_k)
+\end{equation}
+
+Pour un one-hot $\mathbf{y}$ avec $y_c = 1$ (classe correcte), cela se simplifie en :
+\begin{equation}
+  \mathcal{L}_{\text{CE}} = -\log(\hat{y}_c) = -\log(p_t)
+\end{equation}
+où $p_t$ est la probabilité attribuée à la classe correcte.
+
+\subsection{Focal Loss}
+
+\begin{defbox}[Problème du déséquilibre]
+Dans le dataset de rétinopathie, le grade 0 (No DR) représente $\sim$73\% des images. La CE classique est dominée par ces exemples faciles et fréquents, au détriment des cas rares mais cliniquement critiques (grades 3--4).
+\end{defbox}
+
+La Focal Loss (Lin et al., 2017) module la CE par un facteur $(1 - p_t)^\gamma$ :
+
+\begin{equation}
+  \boxed{\mathcal{L}_{\text{FL}}(p_t) = -\alpha_t \cdot (1 - p_t)^\gamma \cdot \log(p_t)}
+\end{equation}
+
+\paragraph{Rôle du paramètre $\gamma$ (focusing parameter).}
+
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Cas} & \textbf{$p_t$} & \textbf{$(1-p_t)^\gamma$ avec $\gamma=2$} \\
+\midrule
+Bien classé (facile) & 0.95 & $(0.05)^2 = 0.0025$ \\
+Modérément classé & 0.70 & $(0.30)^2 = 0.09$ \\
+Mal classé (difficile) & 0.20 & $(0.80)^2 = 0.64$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Le facteur focal réduit la contribution des exemples faciles de $\times 400$ par rapport aux exemples difficiles. Le modèle est ainsi forcé de se concentrer sur les cas ambigus.
+
+\paragraph{Pondération par classe $\alpha_t$.}
+En plus de la modulation focale, un poids par classe est appliqué :
+\begin{equation}
+  \alpha_c = \frac{N}{K \cdot N_c}
+\end{equation}
+où $N$ est le nombre total d'échantillons, $K$ le nombre de classes et $N_c$ le nombre d'échantillons de la classe $c$. Les classes rares reçoivent un poids plus élevé.
+
+\subsection{Label Smoothing}
+
+Au lieu d'utiliser des labels one-hot durs ($y_c \in \{0, 1\}$), le label smoothing remplace :
+\begin{equation}
+  y'_k = \begin{cases}
+    1 - \varepsilon + \frac{\varepsilon}{K} & \text{si } k = c \text{ (classe correcte)} \\[4pt]
+    \frac{\varepsilon}{K} & \text{sinon}
+  \end{cases}
+\end{equation}
+avec $\varepsilon = 0.05$. Cela empêche le modèle d'être trop confiant et agit comme un régularisateur.
+
+\subsection{Quadratic Weighted Kappa (QWK) Loss}
+
+Le QWK est la métrique standard pour la classification ordinale de la rétinopathie :
+
+\begin{equation}
+  \kappa = 1 - \frac{\sum_{i,j} w_{ij}\,O_{ij}}{\sum_{i,j} w_{ij}\,E_{ij}}
+\end{equation}
+
+où :
+\begin{itemize}[leftmargin=2em]
+  \item $O_{ij}$ : matrice de confusion normalisée (observée).
+  \item $E_{ij} = \frac{h_i^{\text{true}} \cdot h_j^{\text{pred}}}{N^2}$ : matrice attendue sous indépendance.
+  \item $w_{ij} = \frac{(i-j)^2}{(K-1)^2}$ : matrice de pénalité quadratique.
+\end{itemize}
+
+La pénalité quadratique signifie qu'une erreur $0 \to 4$ est pénalisée 16 fois plus qu'une erreur $0 \to 1$, ce qui reflète l'importance clinique.
+
+Pour rendre le QWK différentiable, on utilise une matrice de confusion ``soft'' :
+\begin{equation}
+  O^{\text{soft}}_{ij} = \frac{1}{N} \sum_{n=1}^{N} y_{n,i} \cdot \hat{y}_{n,j}
+\end{equation}
+et la loss à minimiser est $\mathcal{L}_{\text{QWK}} = 1 - \kappa$.
+
+% ══════════════════════════════════════════════════════════════
+\section{Augmentation des données}
+% ══════════════════════════════════════════════════════════════
+
+\subsection{Augmentations géométriques}
+
+Les images de fond d'œil sont \emph{invariantes par rotation} (pas d'orientation anatomique fixe) et par réflexion, ce qui autorise des transformations géométriques agressives :
+
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{Rotations} de $0°$, $90°$, $180°$, $270°$ (sans perte d'information).
+  \item \textbf{Flip horizontal} et \textbf{vertical}.
+\end{itemize}
+
+Cela multiplie par 8 la diversité effective du dataset.
+
+\subsection{MixUp}
+
+MixUp (Zhang et al., 2018) crée des exemples virtuels par combinaison convexe :
+
+\begin{align}
+  \tilde{\mathbf{x}} &= \lambda\,\mathbf{x}_i + (1-\lambda)\,\mathbf{x}_j \\
+  \tilde{\mathbf{y}} &= \lambda\,\mathbf{y}_i + (1-\lambda)\,\mathbf{y}_j
+\end{align}
+
+où $\lambda \sim \text{Beta}(\alpha, \alpha)$ avec $\alpha = 0.2$. La distribution Beta avec un petit $\alpha$ produit des $\lambda$ proches de 0 ou 1, de sorte que les mélanges restent proches d'un des deux exemples originaux.
+
+\begin{notebox}[Effet sur l'espace de décision]
+MixUp encourage le modèle à apprendre des frontières de décision \emph{linéaires} entre les classes, ce qui :
+\begin{itemize}
+  \item Réduit l'overfitting (régularisation implicite).
+  \item Améliore la calibration (les probabilités de sortie sont plus fiables).
+  \item Renforce la robustesse aux perturbations adversariales.
+\end{itemize}
+\end{notebox}
+
+\subsection{CutMix}
+
+CutMix (Yun et al., 2019) remplace un patch rectangulaire d'une image par un patch correspondant d'une autre image :
+
+\begin{align}
+  \tilde{\mathbf{x}} &= \mathbf{M} \odot \mathbf{x}_i + (\mathbf{1} - \mathbf{M}) \odot \mathbf{x}_j \\
+  \tilde{\mathbf{y}} &= \lambda\,\mathbf{y}_i + (1 - \lambda)\,\mathbf{y}_j
+\end{align}
+
+où $\mathbf{M} \in \{0,1\}^{H \times W}$ est un masque binaire rectangulaire et $\lambda = 1 - \frac{r_w \cdot r_h}{W \cdot H}$ est la proportion de l'image originale conservée.
+
+La taille du patch est tirée aléatoirement :
+\begin{equation}
+  r_w = W\sqrt{1-\lambda'}, \quad r_h = H\sqrt{1-\lambda'}, \quad \lambda' \sim \text{Uniform}(0,1)
+\end{equation}
+
+% ══════════════════════════════════════════════════════════════
+\section{Optimisation de l'entraînement}
+% ══════════════════════════════════════════════════════════════
+
+\subsection{Optimiseur AdamW}
+
+AdamW découple la régularisation L2 (weight decay) de l'estimation des moments adaptatifs :
+
+\begin{align}
+  \mathbf{m}_t &= \beta_1\,\mathbf{m}_{t-1} + (1 - \beta_1)\,\mathbf{g}_t & \text{(moment d'ordre 1)} \\
+  \mathbf{v}_t &= \beta_2\,\mathbf{v}_{t-1} + (1 - \beta_2)\,\mathbf{g}_t^2 & \text{(moment d'ordre 2)} \\
+  \hat{\mathbf{m}}_t &= \frac{\mathbf{m}_t}{1 - \beta_1^t}, \quad \hat{\mathbf{v}}_t = \frac{\mathbf{v}_t}{1 - \beta_2^t} & \text{(correction du biais)} \\[6pt]
+  \bm{\theta}_t &= \bm{\theta}_{t-1} - \eta\!\left(\frac{\hat{\mathbf{m}}_t}{\sqrt{\hat{\mathbf{v}}_t} + \epsilon} + \lambda_{\text{wd}}\,\bm{\theta}_{t-1}\right) & \text{(mise à jour)}
+\end{align}
+
+Le terme $\lambda_{\text{wd}}\,\bm{\theta}_{t-1}$ est le weight decay \emph{découplé} : il pénalise directement la norme des poids, indépendamment de l'adaptation du learning rate.
+
+\subsection{Réduction du learning rate sur plateau}
+
+Quand la loss de validation stagne pendant $p$ epochs (patience), le learning rate est réduit :
+\begin{equation}
+  \eta_{t+1} = \eta_t \times f, \quad f = 0.5
+\end{equation}
+avec un plancher $\eta_{\min} = 10^{-7}$.
+
+\subsection{Early Stopping}
+
+L'entraînement est arrêté si la métrique de validation (QWK) ne s'améliore pas pendant $P = 10$ epochs consécutives, et les poids du meilleur epoch sont restaurés. Cela prévient l'overfitting en identifiant automatiquement le point optimal.
+
+% ══════════════════════════════════════════════════════════════
+\section{Optimisation du modèle à l'inférence}
+% ══════════════════════════════════════════════════════════════
+
+\subsection{Pruning structurel}
+
+Le pruning élimine les poids de faible magnitude :
+
+\begin{equation}
+  w'_{ij} = \begin{cases}
+    w_{ij} & \text{si } |w_{ij}| > \tau \\
+    0 & \text{sinon}
+  \end{cases}
+\end{equation}
+
+Le seuil $\tau$ est ajusté progressivement via un polynôme pour atteindre le taux de sparsité cible $s_f$ :
+\begin{equation}
+  s_t = s_f + (s_i - s_f)\left(1 - \frac{t - t_0}{t_1 - t_0}\right)^3
+\end{equation}
+avec $s_i = 0$ (sparsité initiale) et $s_f = 0.5$ (50\% de poids mis à zéro).
+
+\subsection{Quantification}
+
+La quantification réduit la précision des poids de float32 (32 bits) à int8 (8 bits) :
+
+\begin{equation}
+  q = \text{round}\!\left(\frac{w - z}{s}\right), \quad s = \frac{\max(w) - \min(w)}{2^b - 1}
+\end{equation}
+
+où $s$ est le facteur d'échelle, $z$ le zero-point et $b = 8$ le nombre de bits. Cela réduit la taille du modèle de $\times 4$ et accélère l'inférence sur CPU.
+
+\subsection{Test-Time Augmentation (TTA)}
+
+Le TTA applique $T$ transformations à chaque image d'entrée et agrège les prédictions :
+
+\begin{equation}
+  \boxed{\hat{\mathbf{y}}_{\text{TTA}} = \frac{1}{T} \sum_{t=1}^{T} f_\theta\!\big(\mathcal{A}_t(\mathbf{x})\big)}
+\end{equation}
+
+avec $\mathcal{A}_t \in \{\text{id}, R_{90}, R_{180}, R_{270}, H, V, HR_{90}, VR_{90}\}$ (8 transformations).
+
+\paragraph{Estimation de l'incertitude.} L'écart-type entre les prédictions TTA fournit une mesure d'incertitude :
+\begin{equation}
+  u_k = \sqrt{\frac{1}{T}\sum_{t=1}^{T}\left(\hat{y}_{k}^{(t)} - \bar{y}_k\right)^2}
+\end{equation}
+
+Une incertitude élevée signale un cas ambigu nécessitant une attention clinique particulière.
+
+% ══════════════════════════════════════════════════════════════
+\section{Évaluation et métriques}
+% ══════════════════════════════════════════════════════════════
+
+\subsection{Matrice de confusion}
+
+Pour $K$ classes, la matrice de confusion $\mathbf{C} \in \N^{K \times K}$ est définie par :
+\begin{equation}
+  C_{ij} = \#\{n : y_n = i \text{ et } \hat{y}_n = j\}
+\end{equation}
+La diagonale contient les classifications correctes.
+
+\subsection{Métriques par classe}
+
+\begin{align}
+  \text{Précision}_k &= \frac{C_{kk}}{\sum_{i} C_{ik}} & \text{(parmi les prédits $k$, combien sont vrais $k$ ?)} \\[6pt]
+  \text{Rappel}_k &= \frac{C_{kk}}{\sum_{j} C_{kj}} & \text{(parmi les vrais $k$, combien sont détectés ?)} \\[6pt]
+  F_1^{(k)} &= 2 \cdot \frac{\text{Précision}_k \cdot \text{Rappel}_k}{\text{Précision}_k + \text{Rappel}_k}
+\end{align}
+
+\subsection{AUC-ROC (Area Under the ROC Curve)}
+
+Pour chaque classe $k$ (one-vs-rest), la courbe ROC trace le taux de vrais positifs en fonction du taux de faux positifs en faisant varier le seuil de décision $\tau$ :
+
+\begin{align}
+  \text{TPR}(\tau) &= \frac{\text{TP}(\tau)}{\text{TP}(\tau) + \text{FN}(\tau)} \\[4pt]
+  \text{FPR}(\tau) &= \frac{\text{FP}(\tau)}{\text{FP}(\tau) + \text{TN}(\tau)}
+\end{align}
+
+L'AUC est l'aire sous cette courbe :
+\begin{equation}
+  \text{AUC}_k = \int_0^1 \text{TPR}_k\big(\text{FPR}_k^{-1}(x)\big)\,dx
+\end{equation}
+
+Un AUC de 1.0 indique un classifieur parfait, 0.5 un classifieur aléatoire. L'AUC macro est la moyenne non pondérée des AUC par classe.
+
+\subsection{Expected Calibration Error (ECE)}
+
+L'ECE mesure l'écart entre la confiance du modèle et sa précision réelle :
+
+\begin{equation}
+  \text{ECE} = \sum_{b=1}^{B} \frac{|S_b|}{N} \left|\text{acc}(S_b) - \text{conf}(S_b)\right|
+\end{equation}
+
+où $S_b$ est l'ensemble des échantillons dont la confiance tombe dans le bin $b$, et :
+\begin{equation}
+  \text{acc}(S_b) = \frac{1}{|S_b|}\sum_{i \in S_b} \mathbf{1}[\hat{y}_i = y_i], \quad
+  \text{conf}(S_b) = \frac{1}{|S_b|}\sum_{i \in S_b} \max_k \hat{y}_{i,k}
+\end{equation}
+
+Un modèle parfaitement calibré a $\text{ECE} = 0$.
+
+% ══════════════════════════════════════════════════════════════
+\section{Explicabilité : Grad-CAM}
+% ══════════════════════════════════════════════════════════════
+
+\begin{defbox}[Gradient-weighted Class Activation Mapping]
+Grad-CAM produit une carte de chaleur montrant quelles régions spatiales de l'image contribuent le plus à la décision du modèle pour une classe donnée.
+\end{defbox}
+
+\subsection{Formulation}
+
+Soit $A^k_{ij}$ les feature maps de la dernière couche convolutive (canal $k$, position spatiale $(i,j)$) et $y^c$ le score de la classe cible $c$ \emph{avant} softmax.
+
+\paragraph{Étape 1.} Calcul des poids d'importance par canal via les gradients :
+\begin{equation}
+  \alpha_k^c = \underbrace{\frac{1}{Z}\sum_{i}\sum_{j}}_{\text{GAP}} \frac{\partial y^c}{\partial A^k_{ij}}
+\end{equation}
+
+\paragraph{Étape 2.} Combinaison linéaire pondérée suivie d'une ReLU :
+\begin{equation}
+  \boxed{L^c_{\text{Grad-CAM}}(i,j) = \ReLU\!\left(\sum_{k} \alpha_k^c \cdot A^k_{ij}\right)}
+\end{equation}
+
+La ReLU ne conserve que les contributions \emph{positives} (régions qui augmentent le score de la classe $c$).
+
+\paragraph{Étape 3.} Upsampling bilinéaire à la résolution de l'image d'entrée et normalisation dans $[0, 1]$.
+
+\begin{notebox}[Importance clinique]
+En imagerie médicale, l'explicabilité n'est pas un luxe mais une nécessité. Un radiologue ne peut pas faire confiance à un modèle ``boîte noire''. Les cartes Grad-CAM permettent de vérifier que le modèle regarde les bonnes zones (micro-anévrismes, hémorragies, néovascularisation) et non des artefacts (bords de l'image, reflets).
+\end{notebox}
+
+% ══════════════════════════════════════════════════════════════
+\section{Récapitulatif des notations}
+% ══════════════════════════════════════════════════════════════
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Symbole} & \textbf{Signification} \\
+\midrule
+$\mathbf{I} \in \R^{H \times W \times 3}$ & Image d'entrée (hauteur $H$, largeur $W$, 3 canaux RGB) \\
+$G_\sigma$ & Noyau gaussien de variance $\sigma^2$ \\
+$K$ & Nombre de classes ($K = 5$ : grades 0 à 4) \\
+$p_t$ & Probabilité assignée à la classe correcte \\
+$\gamma$ & Paramètre de focalisation de la Focal Loss \\
+$\alpha_t$ & Poids de la classe $t$ dans la Focal Loss \\
+$\kappa$ & Quadratic Weighted Kappa \\
+$\lambda$ & Coefficient de mélange MixUp / CutMix \\
+$\eta$ & Learning rate \\
+$\bm{\theta}$ & Paramètres du modèle \\
+$\mathbf{m}_t, \mathbf{v}_t$ & Moments d'ordre 1 et 2 (AdamW) \\
+$s, z$ & Facteur d'échelle et zero-point (quantification) \\
+$A^k_{ij}$ & Feature map du canal $k$ à la position $(i,j)$ \\
+$\alpha_k^c$ & Poids Grad-CAM du canal $k$ pour la classe $c$ \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\vfill
+\begin{center}
+\textcolor{accent}{\rule{0.5\textwidth}{0.5pt}}\\[0.5em]
+\textit{Fin du document --- Fondements mathématiques et algorithmiques}
+\end{center}
+
+\end{document}

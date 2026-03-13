@@ -1,0 +1,35 @@
+# =============================================================================
+# RetinAI — Configuration d'entraînement
+# =============================================================================
+
+# -- Données --
+data_dir: "data/processed"
+labels_csv: "data/labels.csv"
+
+# -- Modèle --
+backbone: "efficientnetv2-s"
+input_size: 512
+dropout_rate: 0.4
+attention_reduction: 16
+
+# -- Entraînement --
+batch_size: 16
+warmup_epochs: 5
+warmup_lr: 1.0e-3
+finetune_epochs: 30
+finetune_lr: 1.0e-4
+weight_decay: 1.0e-4
+
+# -- Loss --
+focal_gamma: 2.0
+label_smoothing: 0.05
+
+# -- Augmentation --
+mixup_alpha: 0.2
+cutmix_alpha: 1.0
+
+# -- Callbacks --
+early_stopping_patience: 10
+
+# -- Sortie --
+output_dir: "models/training"

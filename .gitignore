@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Data (volumineux)
+data/raw/
+data/processed/
+*.npy
+*.h5
+*.hdf5
+
+# Modèles (volumineux)
+models/training/
+models/optimized/
+*.tflite
+*.onnx
+*.pb
+*.keras
+*.savedmodel/
+
+# MLflow
+mlruns/
+mlartifacts/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+*.log
+
+# Jupyter
+.ipynb_checkpoints/

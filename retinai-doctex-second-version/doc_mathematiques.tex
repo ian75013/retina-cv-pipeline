@@ -1,0 +1,562 @@
+\documentclass[11pt,a4paper]{article}
+
+% -- Encodage et langue --
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+
+% -- Mise en page --
+\usepackage[margin=2.4cm]{geometry}
+\usepackage{setspace}
+\onehalfspacing
+
+% -- Mathematiques --
+\usepackage{amsmath,amssymb,amsfonts,mathtools}
+\usepackage{bm}
+
+% -- Algorithmes --
+\usepackage[ruled,vlined,french,linesnumbered]{algorithm2e}
+
+% -- Figures et couleurs --
+\usepackage{tikz,pgfplots}
+\pgfplotsset{compat=1.18}
+\usetikzlibrary{arrows.meta,positioning,calc,decorations.pathreplacing,shapes.geometric,babel}
+\usepackage{graphicx}
+\usepackage{xcolor}
+
+% -- Tableaux --
+\usepackage{booktabs,array,tabularx,colortbl}
+
+% -- Divers --
+\usepackage{enumitem,fancyhdr,titlesec}
+\usepackage[colorlinks=true,linkcolor=blue!60!black,citecolor=green!50!black,urlcolor=blue!70!black]{hyperref}
+
+% -- Couleurs --
+\definecolor{accent}{HTML}{1A5276}
+\definecolor{mygray}{HTML}{F2F3F4}
+\definecolor{mygreen}{HTML}{27AE60}
+\definecolor{myred}{HTML}{E74C3C}
+\definecolor{myorange}{HTML}{E67E22}
+\definecolor{myblue}{HTML}{2980B9}
+\definecolor{mypurple}{HTML}{8E44AD}
+
+% -- En-tetes --
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textcolor{accent}{\textsc{RetinAI --- Fondements Math\'ematiques}}}
+\fancyhead[R]{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% -- Titres --
+\titleformat{\section}{\Large\bfseries\color{accent}}{\thesection}{1em}{}[\vspace{-0.5em}\rule{\textwidth}{0.4pt}]
+\titleformat{\subsection}{\large\bfseries\color{accent!80!black}}{\thesubsection}{1em}{}
+
+% -- Boites --
+\usepackage{tcolorbox}
+\tcbuselibrary{skins,breakable}
+\newtcolorbox{defbox}[1][]{colback=mygray,colframe=accent,fonttitle=\bfseries,title=#1,breakable,arc=2pt,boxrule=0.8pt}
+\newtcolorbox{notebox}[1][]{colback=mygreen!5,colframe=mygreen!70!black,fonttitle=\bfseries,title=#1,breakable,arc=2pt,boxrule=0.6pt}
+\newtcolorbox{intubox}[1][]{colback=myblue!5,colframe=myblue!70!black,fonttitle=\bfseries,title=#1,breakable,arc=2pt,boxrule=0.6pt}
+\newtcolorbox{rappelbox}[1][]{colback=mypurple!5,colframe=mypurple!60!black,fonttitle=\bfseries,title=#1,breakable,arc=2pt,boxrule=0.6pt}
+\newtcolorbox{warnbox}[1][]{colback=myorange!5,colframe=myorange!70!black,fonttitle=\bfseries,title=#1,breakable,arc=2pt,boxrule=0.6pt}
+
+% -- Commandes --
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\Z}{\mathbb{Z}}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\DeclareMathOperator{\softmax}{softmax}
+\DeclareMathOperator{\sigmoid}{sigmoid}
+\DeclareMathOperator{\ReLU}{ReLU}
+
+\begin{document}
+\begin{titlepage}
+\centering
+\vspace*{2.5cm}
+{\Huge\bfseries\color{accent} RetinAI\par}
+\vspace{0.8cm}
+{\LARGE Fondements Math\'ematiques et\\Algorithmiques du Pipeline\par}
+\vspace{1.2cm}
+{\large\textit{Analyse d\'etaill\'ee avec interpr\'etations intuitives\\pour \'etudiants en L2--L3 / CPGE}\par}
+\vspace{2.5cm}
+{\large Pipeline ML $\cdot$ TensorFlow $\cdot$ Computer Vision\par}
+\vspace{1cm}
+{\normalsize Mars 2026\par}
+\vfill
+{\small
+\textcolor{mypurple}{$\blacksquare$} Rappels de cours \quad
+\textcolor{myblue}{$\blacksquare$} Interpr\'etation intuitive \quad
+\textcolor{mygreen}{$\blacksquare$} Remarques \quad
+\textcolor{myorange}{$\blacksquare$} Points de vigilance}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+%% ================================================================
+\section{Introduction et pr\'erequis}
+%% ================================================================
+
+Ce document s'adresse aux \'etudiants de \textbf{L2--L3 math\'ematiques} ou de \textbf{CPGE (MP/PC)} qui souhaitent comprendre les fondements math\'ematiques du deep learning appliqu\'e \`a la vision par ordinateur. Les pr\'erequis sont~:
+
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{Alg\`ebre lin\'eaire}~: espaces vectoriels, produit matriciel, valeurs propres, produit scalaire.
+  \item \textbf{Analyse}~: d\'eriv\'ees partielles, gradient, r\`egle de cha\^ine, suites, convergence.
+  \item \textbf{Probabilit\'es}~: variables al\'eatoires, esp\'erance, variance, loi de Bayes, loi Beta.
+  \item \textbf{Analyse de Fourier (utile)}~: d\'ecomposition basse/haute fr\'equence, convolution.
+\end{itemize}
+
+Chaque section commence par le contexte intuitif, puis d\'eveloppe la formalisation math\'ematique.
+
+%% ================================================================
+\section{Pr\'etraitement des images r\'etiniennes}
+%% ================================================================
+
+\subsection{Repr\'esentation math\'ematique d'une image}
+
+\begin{defbox}[Image num\'erique]
+Une image couleur est une fonction $I : \{1,\ldots,H\} \times \{1,\ldots,W\} \to \{0,\ldots,255\}^3$ qui associe \`a chaque pixel $(i,j)$ un triplet $(R,G,B)$. On la repr\'esente comme un tenseur $\mathbf{I} \in \R^{H \times W \times 3}$.
+\end{defbox}
+
+\begin{rappelbox}[Rappel~: tenseur]
+Un tenseur d'ordre~3 est simplement une \og{}matrice \`a 3 indices\fg{}. En L2, vous manipulez des matrices $A \in \R^{m \times n}$ (ordre~2). Ici, l'image a 3 dimensions~: hauteur $H$, largeur $W$, et 3 canaux de couleur. On note $I_{i,j,c}$ l'intensit\'e du pixel $(i,j)$ sur le canal $c$.
+\end{rappelbox}
+
+\begin{intubox}[Analogie avec l'analyse fonctionnelle]
+Une image en niveaux de gris est une fonction d\'efinie sur un domaine discret $\{1,\ldots,H\} \times \{1,\ldots,W\}$ \`a valeurs dans $[0,255]$, exactement comme les fonctions $f : \R^2 \to \R$ que vous \'etudiez en analyse. Le traitement d'images consiste \`a appliquer des \emph{op\'erateurs} (lin\'eaires ou non) \`a ces fonctions.
+\end{intubox}
+
+\subsection{Convolution et filtrage}
+
+\begin{rappelbox}[Rappel~: produit de convolution (L2 Analyse)]
+En analyse, le produit de convolution de $f$ et $g$ est~:
+\[
+(f * g)(x) = \int_{-\infty}^{+\infty} f(t)\,g(x-t)\,dt
+\]
+C'est un op\'erateur \textbf{lin\'eaire} et \textbf{invariant par translation}. En traitement d'images, on passe au cas discret et 2D~:
+\[
+(I * K)(i,j) = \sum_{m} \sum_{n} I(i-m,\,j-n)\,K(m,n)
+\]
+\end{rappelbox}
+
+\begin{intubox}[Ce que fait une convolution sur une image]
+La convolution r\'ealise une \textbf{moyenne pond\'er\'ee locale}~: pour calculer la nouvelle valeur du pixel $(i,j)$, on prend une combinaison lin\'eaire de ses voisins, avec des poids donn\'es par le noyau $K$. Le choix de $K$ d\'etermine l'effet~:
+\begin{itemize}
+  \item $K = $ matrice constante $\frac{1}{n^2}$ $\to$ flou (moyenne locale).
+  \item $K$ avec valeurs positives au centre et n\'egatives autour $\to$ d\'etection de contours.
+  \item $K$ gaussien $\to$ flou doux (suppression des hautes fr\'equences).
+\end{itemize}
+\end{intubox}
+
+\subsection{Normalisation Ben-Graham}
+
+Le noyau gaussien 2D est~:
+\begin{equation}
+  G_\sigma(x,y) = \frac{1}{2\pi\sigma^2}\,\exp\!\left(-\frac{x^2+y^2}{2\sigma^2}\right)
+\end{equation}
+
+\begin{rappelbox}[Rappel~: la gaussienne 2D]
+Vous connaissez la loi $\mathcal{N}(0,\sigma^2)$. Le noyau $G_\sigma$ est sa version 2D. C'est le \emph{seul} noyau qui est \`a la fois~:
+\begin{itemize}
+  \item \textbf{S\'eparable}~: $G_\sigma(x,y) = g_\sigma(x) \cdot g_\sigma(y)$ (produit de deux 1D).
+  \item \textbf{Isotrope}~: invariant par rotation (ne d\'epend que de $\sqrt{x^2+y^2}$).
+  \item \textbf{Stable par convolution}~: $G_{\sigma_1} * G_{\sigma_2} = G_{\sqrt{\sigma_1^2 + \sigma_2^2}}$.
+\end{itemize}
+\end{rappelbox}
+
+La transformation Ben-Graham soustrait le flou gaussien~:
+\begin{equation}
+  \boxed{I_{\text{norm}} = \alpha(I - I*G_\sigma) + \beta}
+\end{equation}
+avec $\alpha = 4$ et $\beta = 128$.
+
+\begin{intubox}[Interpr\'etation~: filtre passe-haut]
+D\'ecomposons l'image en deux composantes~:
+\[
+I = \underbrace{I * G_\sigma}_{\text{basse fr\'equence (\'eclairage)}} + \underbrace{(I - I*G_\sigma)}_{\text{haute fr\'equence (d\'etails)}}
+\]
+C'est comme projeter un vecteur sur un sous-espace et son orthogonal. La formule ne garde que les hautes fr\'equences (vaisseaux, l\'esions) et supprime l'illumination non-uniforme.
+
+\textbf{Lien avec Fourier}~: la transform\'ee de Fourier d'une gaussienne est une gaussienne. Un noyau large ($\sigma$ grand) tue les hautes fr\'equences. Soustraire $I*G_\sigma$ revient \`a appliquer un filtre passe-haut.
+\end{intubox}
+
+\subsection{CLAHE}
+
+\begin{rappelbox}[Rappel~: fonction de r\'epartition (L2 Probabilit\'es)]
+Pour une v.a. $X$, la CDF est $F_X(t) = P(X \leq t)$. L'histogramme d'une image est l'analogue empirique~: $h(k) = \#\{(i,j) : I(i,j) = k\}$, et~:
+\[
+\text{CDF}(k) = \sum_{i=0}^{k} h(i)
+\]
+\end{rappelbox}
+
+L'\'egalisation d'histogramme applique~:
+\begin{equation}
+  T(k) = \left\lfloor 255 \cdot \frac{\text{CDF}(k) - \text{CDF}_{\min}}{H \cdot W - \text{CDF}_{\min}} \right\rfloor
+\end{equation}
+
+\begin{intubox}[Le lemme de la CDF inverse]
+En probabilit\'es, si $U \sim \text{Uniforme}([0,1])$, alors $F_X^{-1}(U) \sim X$. R\'eciproquement, $F_X(X) \sim \text{Uniforme}([0,1])$. L'\'egalisation d'histogramme fait \emph{exactement} cela~: on applique la CDF empirique \`a chaque pixel, transformant la distribution des intensit\'es en distribution quasi-uniforme. C'est la \textbf{transformation quantile} des statisticiens.
+\end{intubox}
+
+Le CLAHE ajoute deux am\'eliorations~: (1) l'\'egalisation est \textbf{locale} (par tuiles $8 \times 8$ avec interpolation bilin\'eaire), et (2) l'histogramme est \textbf{\'ecr\^et\'e} (seuil $\tau = 2.0$) pour limiter l'amplification du bruit.
+
+\begin{intubox}[Analogie~: un \'egaliseur audio adaptatif]
+En audio, un compresseur limite les pics de volume tout en amplifiant les sons faibles. Le CLAHE fait la m\^eme chose \emph{localement} sur une image~: il amplifie le contraste dans les zones sombres tout en le limitant dans les zones d\'ej\`a contrast\'ees. Le param\`etre $\tau$ est le seuil de compression.
+\end{intubox}
+
+%% ================================================================
+\section{R\'eseaux de neurones convolutifs}
+%% ================================================================
+
+\subsection{Le neurone artificiel}
+
+Un neurone calcule~: $y = \varphi(\mathbf{w}^\top \mathbf{x} + b)$
+
+\begin{intubox}[Interpr\'etation g\'eom\'etrique]
+Sans $\varphi$, un neurone calcule un \textbf{produit scalaire} $\langle \mathbf{w}, \mathbf{x} \rangle + b$~: c'est l'\'equation d'un hyperplan dans $\R^n$. Le neurone mesure de quel c\^ot\'e de cet hyperplan se trouve $\mathbf{x}$. La fonction $\varphi$ \og{}d\'ecide\fg{} ensuite si le neurone s'active.
+
+Un r\'eseau de neurones empile ces partitions pour cr\'eer des r\'egions de d\'ecision arbitrairement complexes. Sans non-lin\'earit\'e, un r\'eseau \`a $L$ couches calcule $f(\mathbf{x}) = W_L \cdots W_1 \mathbf{x}$~: une simple application lin\'eaire (le produit de matrices est une matrice). Un r\'eseau lin\'eaire profond \textbf{n'est pas plus expressif} qu'une seule couche~!
+\end{intubox}
+
+\subsection{Convolution 2D dans les CNN}
+
+\begin{defbox}[Op\'eration de convolution 2D]
+Soit $\mathbf{X} \in \R^{H \times W \times C_{\text{in}}}$ et un filtre $\mathbf{W} \in \R^{k \times k \times C_{\text{in}} \times C_{\text{out}}}$~:
+\begin{equation}
+  Y_{i,j,f} = \sum_{c=1}^{C_{\text{in}}} \sum_{m=0}^{k-1} \sum_{n=0}^{k-1} W_{m,n,c,f} \cdot X_{i+m,\,j+n,\,c} + b_f
+\end{equation}
+\end{defbox}
+
+\begin{rappelbox}[Lien avec les matrices de Toeplitz (L3)]
+En 1D, la convolution discr\`ete s'\'ecrit comme la multiplication par une matrice tridiagonale de Toeplitz. La convolution 2D est la version bloc-Toeplitz. La structure creuse signifie beaucoup moins de param\`etres qu'une couche dense~: $9 \cdot C_{\text{in}} \cdot C_{\text{out}}$ au lieu de $H^2 W^2 \cdot C_{\text{in}} \cdot C_{\text{out}}$.
+\end{rappelbox}
+
+\begin{intubox}[Ce que \og{}voit\fg{} un filtre convolutif]
+Un filtre $3 \times 3$ regarde une fen\^etre locale de 9 pixels et calcule un produit scalaire avec ses poids. Si les poids ressemblent \`a un motif (contour vertical par exemple), le produit scalaire est grand quand l'image locale ressemble \`a ce motif. C'est un \textbf{d\'etecteur de motifs locaux}.
+
+\textbf{Partage de poids}~: le m\^eme filtre est appliqu\'e \`a \emph{toutes} les positions $\to$ invariance par translation.\\
+\textbf{Localit\'e}~: chaque sortie ne d\'epend que d'un voisinage $k \times k$.
+\end{intubox}
+
+\subsection{Fonctions d'activation}
+
+\paragraph{ReLU.} $\ReLU(x) = \max(0, x)$. D\'eriv\'ee~: $\mathbf{1}_{x>0}$ (0 ou 1), donc pas de vanishing gradient.
+
+\paragraph{Swish.} Utilis\'ee dans EfficientNetV2~: $\text{Swish}(x) = \frac{x}{1 + e^{-x}}$. Fonction $C^\infty$, laisse passer un petit signal n\'egatif.
+
+\paragraph{Softmax.} Pour la classification~:
+\begin{equation}
+  \softmax(z_i) = \frac{e^{z_i}}{\sum_{j=1}^{K} e^{z_j}}
+\end{equation}
+
+\begin{rappelbox}[Lien avec la mesure de Gibbs]
+La softmax est la distribution de Boltzmann de la physique statistique~: $P(\text{\'etat } i) \propto e^{-E_i/kT}$. C'est la distribution qui \textbf{maximise l'entropie} sous contrainte d'\'energie moyenne fix\'ee. Elle est aussi le gradient de log-sum-exp~: $\nabla_{\mathbf{z}} \log(\sum_j e^{z_j}) = \softmax(\mathbf{z})$.
+\end{rappelbox}
+
+\subsection{Batch Normalization}
+
+Pour un mini-batch $\mathcal{B} = \{x_1, \ldots, x_m\}$~:
+\begin{align}
+  \hat{x}_i = \frac{x_i - \mu_\mathcal{B}}{\sqrt{\sigma_\mathcal{B}^2 + \epsilon}}, \qquad y_i = \gamma\,\hat{x}_i + \beta
+\end{align}
+
+\begin{intubox}[Interpr\'etation statistique]
+L'\'etape $\hat{x}_i = \frac{x_i - \mu}{\sigma}$ est la \textbf{standardisation} (variable centr\'ee r\'eduite). En g\'eom\'etrie, cela recentre le nuage \`a l'origine et normalise sa variance \`a 1. Cela stabilise les activations et permet des learning rates plus \'elev\'es. Les param\`etres appris $\gamma, \beta$ permettent au r\'eseau de \og{}d\'efaire\fg{} la normalisation si n\'ecessaire.
+\end{intubox}
+
+\subsection{EfficientNetV2 et Squeeze-and-Excitation}
+
+Le module SE recalibre les canaux selon leur importance~:
+\begin{align}
+  \mathbf{s} &= \sigma\!\left(\mathbf{W}_2\,\ReLU(\mathbf{W}_1\,\text{GAP}(\mathbf{F}))\right) \in \R^C \\
+  \widetilde{\mathbf{F}}_c &= s_c \cdot \mathbf{F}_c
+\end{align}
+
+\begin{intubox}[Analogie~: une ACP adaptative et apprise]
+L'ACP (L3) identifie les directions de variance maximale. Le module SE fait quelque chose de similaire mais \textbf{adaptatif}~: pour chaque image, il identifie quels canaux sont les plus informatifs ($s_c > 0.5$) et att\'enue les canaux bruit\'es ($s_c < 0.5$). Le GAP r\'esume chaque canal en un scalaire (sa moyenne spatiale), puis le MLP ($C \to C/r \to C$ avec $r=16$) agit comme un goulot d'\'etranglement qui force une repr\'esentation comprim\'ee des relations inter-canaux.
+\end{intubox}
+
+\subsection{Attention spatiale (CBAM)}
+
+Attention par canal~:
+$\mathbf{M}_c(\mathbf{F}) = \sigma\!\left(\text{MLP}(\text{AvgPool}(\mathbf{F})) + \text{MLP}(\text{MaxPool}(\mathbf{F}))\right)$
+
+Attention spatiale ($\mathbf{F}' = \mathbf{M}_c \odot \mathbf{F}$)~:
+$\mathbf{M}_s(\mathbf{F}') = \sigma\!\left(f^{7 \times 7}([\text{AvgPool}_c(\mathbf{F}');\;\text{MaxPool}_c(\mathbf{F}')])\right)$
+
+Sortie~: $\boxed{\widetilde{\mathbf{F}} = \mathbf{M}_s(\mathbf{F}') \odot \mathbf{F}'}$
+
+\begin{intubox}[La carte de saillance comme une \og{}loupe adaptative\fg{}]
+$\mathbf{M}_s \in [0,1]^{H \times W}$ dit, pour chaque position, \og{}\`a quel point cette zone est int\'eressante\fg{}. En imagerie r\'etinienne, les micro-an\'evrismes (quelques pixels) sont les r\'egions discriminantes. Sans attention, le r\'eseau traite uniform\'ement les $512^2$ pixels. Avec $\mathbf{M}_s$, il apprend \`a concentrer ses ressources sur les zones de l\'esions. C'est comme donner au r\'eseau une loupe qui se d\'eplace automatiquement.
+\end{intubox}
+
+\subsection{Transfer Learning}
+
+\begin{intubox}[Pourquoi le transfert marche~: hi\'erarchie des features]
+Les couches basses d'un CNN apprennent des features universelles (contours, textures). Les couches hautes sont sp\'ecifiques \`a la t\^ache.
+
+\textbf{Analogie d'alg\`ebre lin\'eaire}~: les premi\`eres couches construisent une \og{}bonne base\fg{} de l'espace des images naturelles. Il suffit d'ajuster les derni\`eres couches (les coordonn\'ees dans cette base) pour la nouvelle t\^ache.
+
+\textbf{Phase~1 (warmup)}~: backbone gel\'e ($\nabla_{\theta_{\text{backbone}}} = 0$), on n'entra\^ine que le classifieur.\\
+\textbf{Phase~2 (fine-tuning)}~: on d\'eg\`ele les derni\`eres couches avec un petit learning rate.
+\end{intubox}
+
+\begin{warnbox}[Pourquoi deux phases~?]
+Si l'on d\'eg\`ele imm\'ediatement, le classifieur (initialis\'e al\'eatoirement) produit des gradients quasi-al\'eatoires qui d\'etruisent les features apprises. C'est comme si un \'el\`eve qui ne comprend rien corrigeait le professeur.
+\end{warnbox}
+
+%% ================================================================
+\section{Fonctions de perte}
+%% ================================================================
+
+\subsection{Cross-Entropy}
+
+\begin{rappelbox}[Rappel~: divergence de Kullback-Leibler (L3)]
+$D_{\text{KL}}(p \| q) = \sum_k p_k \log \frac{p_k}{q_k} = \underbrace{-\sum_k p_k \log q_k}_{\text{cross-entropy}} - \underbrace{(-\sum_k p_k \log p_k)}_{H(p)}$
+
+Comme $H(p)$ est constant, minimiser la CE revient \`a minimiser $D_{\text{KL}}(p \| q)$.
+\end{rappelbox}
+
+\begin{equation}
+  \mathcal{L}_{\text{CE}} = -\sum_{k=1}^{K} y_k \log(\hat{y}_k) \xrightarrow{\text{one-hot}} -\log(p_t)
+\end{equation}
+
+\begin{intubox}[La CE comme surprise]
+$-\log(p_t)$ mesure la \og{}surprise\fg{} du mod\`ele face \`a la bonne r\'eponse. Si $p_t = 0.99$, loss $\approx 0.01$. Si $p_t = 0.01$, loss $\approx 4.6$. Minimiser la CE = minimiser la surprise moyenne.
+
+\textbf{Vue g\'eom\'etrique}~: dans le simplexe $\Delta^{K-1} = \{q \in \R^K : q_i \geq 0, \sum q_i = 1\}$, la CE mesure une \og{}distance\fg{} (non sym\'etrique) entre $\hat{\mathbf{y}}$ et le sommet de la classe correcte.
+\end{intubox}
+
+\subsection{Focal Loss}
+
+\begin{equation}
+  \boxed{\mathcal{L}_{\text{FL}}(p_t) = -\alpha_t \cdot (1 - p_t)^\gamma \cdot \log(p_t)}
+\end{equation}
+
+\begin{intubox}[Dissection du facteur focal]
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Cas} & $p_t$ & $(1-p_t)^2$ & \textbf{Contribution} \\
+\midrule
+Bien class\'e & 0.95 & $0.0025$ & $\times 1$ \\
+Moyen & 0.70 & $0.09$ & $\times 36$ \\
+Mal class\'e & 0.20 & $0.64$ & $\times 256$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+Avec $\gamma=2$, le mod\`ele passe 256 fois plus d'\og{}\'energie\fg{} sur les cas difficiles. C'est de la p\'edagogie diff\'erenci\'ee appliqu\'ee aux r\'eseaux de neurones~!
+
+La pond\'eration $\alpha_c = \frac{N}{K \cdot N_c}$ compense le d\'es\'equilibre des classes~: le grade~4 (200 images sur 10\,000) re\c{c}oit un poids de~10, le grade~0 (7300 images) un poids de~0.27.
+\end{intubox}
+
+\subsection{Label Smoothing}
+
+\begin{equation}
+  y'_k = \begin{cases}
+    1 - \varepsilon + \frac{\varepsilon}{K} & \text{si } k = c \\[4pt]
+    \frac{\varepsilon}{K} & \text{sinon}
+  \end{cases}
+\end{equation}
+
+\begin{intubox}[Pourquoi ne pas viser la perfection~?]
+Avec un one-hot dur, le mod\`ele vise $\hat{y}_c \to 1$, soit $z_c \to +\infty$. Cela cr\'ee un mod\`ele \textbf{sur-confiant}. Le label smoothing dit~: \og{}96\% de chance que ce soit la classe $c$, mais 4\% d'incertitude\fg{}. En termes d'entropie, on augmente $H(\mathbf{y})$ de 0 (certitude totale) \`a $H(\mathbf{y}') > 0$. C'est une \textbf{r\'egularisation entropique}.
+\end{intubox}
+
+\subsection{Quadratic Weighted Kappa (QWK) Loss}
+
+\begin{equation}
+  \kappa = 1 - \frac{\sum_{i,j} w_{ij}\,O_{ij}}{\sum_{i,j} w_{ij}\,E_{ij}}, \quad w_{ij} = \frac{(i-j)^2}{(K-1)^2}
+\end{equation}
+
+\begin{intubox}[Le QWK comme un $\chi^2$ pond\'er\'e]
+La structure $1 - \frac{\text{observ\'e}}{\text{attendu}}$ rappelle le test du $\chi^2$ d'ind\'ependance (L2 Statistiques). $\kappa = 1$~: accord parfait. $\kappa = 0$~: pas mieux que le hasard.
+
+La p\'enalit\'e quadratique refl\`ete la s\'ev\'erit\'e clinique~: confondre grade~0 et grade~1 ($w = 1/16$) est b\'enin, mais confondre grade~0 et grade~4 ($w = 1$) est potentiellement mortel. C'est une distance au carr\'e $d(i,j) = (i-j)^2$.
+\end{intubox}
+
+%% ================================================================
+\section{Augmentation des donn\'ees}
+%% ================================================================
+
+\subsection{Augmentations g\'eom\'etriques et le groupe di\'edral $D_4$}
+
+\begin{rappelbox}[Rappel~: le groupe $D_4$ (L2 Alg\`ebre)]
+$D_4$ est le groupe des isom\'etries du carr\'e, d'ordre~8, engendr\'e par une rotation $r$ de $\pi/2$ et une r\'eflexion $s$~: $D_4 = \langle r, s \mid r^4 = s^2 = e,\; srs = r^{-1} \rangle$. Ses 8 \'el\'ements (4 rotations + 4 r\'eflexions) correspondent exactement aux augmentations appliqu\'ees aux images r\'etiniennes, qui sont invariantes par le groupe entier.
+\end{rappelbox}
+
+\subsection{MixUp}
+
+$\tilde{\mathbf{x}} = \lambda\,\mathbf{x}_i + (1-\lambda)\,\mathbf{x}_j$, \quad $\tilde{\mathbf{y}} = \lambda\,\mathbf{y}_i + (1-\lambda)\,\mathbf{y}_j$, \quad $\lambda \sim \text{Beta}(0.2, 0.2)$.
+
+\begin{rappelbox}[Rappel~: la loi Beta]
+$\text{Beta}(a,b)$ a pour densit\'e $f(x) = \frac{x^{a-1}(1-x)^{b-1}}{B(a,b)}$ sur $[0,1]$. Pour $a = b = 0.2$, la densit\'e est en U~: $\lambda$ est presque toujours proche de 0 ou 1.
+\end{rappelbox}
+
+\begin{intubox}[Interpolation dans l'espace des images]
+Les images sont des points dans $\R^{H \times W \times 3}$. MixUp cr\'ee de nouveaux points sur les \textbf{segments} reliant des paires d'images. Le mod\`ele apprend des fronti\`eres de d\'ecision \emph{lisses} (r\'egularisation implicite) et ses probabilit\'es sont mieux calibr\'ees.
+\end{intubox}
+
+\subsection{CutMix}
+
+$\tilde{\mathbf{x}} = \mathbf{M} \odot \mathbf{x}_i + (\mathbf{1} - \mathbf{M}) \odot \mathbf{x}_j$
+
+\begin{intubox}[MixUp vs CutMix~: globalit\'e vs localit\'e]
+MixUp superpose les images en transparence (m\'elange global). CutMix d\'ecoupe un morceau et le colle (m\'elange local). CutMix force le mod\`ele \`a ne pas se reposer sur une seule zone~: c'est un m\'ecanisme de \textbf{robustesse \`a l'occultation}.
+\end{intubox}
+
+%% ================================================================
+\section{Optimisation de l'entra\^inement}
+%% ================================================================
+
+\subsection{Descente de gradient}
+
+\begin{rappelbox}[Rappel~: gradient (L2 Analyse)]
+Le gradient $\nabla f(\mathbf{x})$ pointe dans la direction de plus forte croissance. Pour minimiser~: $\mathbf{x}_{t+1} = \mathbf{x}_t - \eta \nabla f(\mathbf{x}_t)$. C'est la m\'ethode d'Euler sur l'EDO $\dot{\mathbf{x}} = -\nabla f(\mathbf{x})$ (flot de gradient). En deep learning, le gradient est calcul\'e par \textbf{r\'etropropagation} (r\`egle de cha\^ine).
+\end{rappelbox}
+
+\subsection{AdamW}
+
+\begin{align}
+  \mathbf{m}_t &= \beta_1\,\mathbf{m}_{t-1} + (1 - \beta_1)\,\mathbf{g}_t  \\
+  \mathbf{v}_t &= \beta_2\,\mathbf{v}_{t-1} + (1 - \beta_2)\,\mathbf{g}_t^2  \\
+  \bm{\theta}_t &= \bm{\theta}_{t-1} - \eta\!\left(\frac{\hat{\mathbf{m}}_t}{\sqrt{\hat{\mathbf{v}}_t} + \epsilon} + \lambda_{\text{wd}}\,\bm{\theta}_{t-1}\right)
+\end{align}
+avec $\hat{\mathbf{m}}_t = \frac{\mathbf{m}_t}{1 - \beta_1^t}$, $\hat{\mathbf{v}}_t = \frac{\mathbf{v}_t}{1 - \beta_2^t}$.
+
+\begin{intubox}[D\'ecryptage terme par terme]
+\begin{enumerate}[leftmargin=1.5em]
+  \item $\mathbf{m}_t$ = moyenne mobile du gradient (momentum). Si le gradient oscille, $\mathbf{m}_t$ s'annule~; s'il est coh\'erent, il accumule de l'inertie. C'est une bille avec masse qui roule sur la surface de la loss.
+
+  \item $\mathbf{v}_t$ = variance du gradient. La division par $\sqrt{\hat{\mathbf{v}}_t}$ normalise le pas~: les param\`etres bruit\'es re\c{c}oivent un pas plus petit. C'est un \textbf{pr\'econditionnement diagonal}, analogue \`a une descente de Newton approch\'ee.
+
+  \item Correction du biais~: \`a $t$ petit, $\mathbf{m}_t$ est biais\'e vers 0. La division par $(1-\beta_1^t)$ corrige.
+
+  \item Weight decay $\lambda_{\text{wd}} \bm{\theta}_{t-1}$~: p\'enalit\'e $L^2$ d\'ecoupl\'ee (r\'egularisation de Tikhonov).
+\end{enumerate}
+\end{intubox}
+
+%% ================================================================
+\section{Optimisation \`a l'inf\'erence}
+%% ================================================================
+
+\subsection{Pruning}
+
+$w'_{ij} = w_{ij} \cdot \mathbf{1}[|w_{ij}| > \tau]$
+
+\begin{intubox}[Approximation creuse]
+En alg\`ebre lin\'eaire, le th\'eor\`eme d'Eckart--Young donne la meilleure approximation de rang $r$ d'une matrice via SVD tronqu\'ee. Le pruning est analogue~: en mettant les petits poids \`a z\'ero, on cr\'ee une matrice \textbf{creuse} qui approxime l'originale. Les poids proches de z\'ero contribuent peu et peuvent \^etre supprim\'es sans perte significative.
+\end{intubox}
+
+\subsection{Quantification}
+
+$q = \text{round}\!\left(\frac{w - z}{s}\right)$, $s = \frac{w_{\max} - w_{\min}}{2^b - 1}$
+
+\begin{intubox}[Discr\'etisation de $\R$ vers $\Z$]
+C'est l'erreur d'arrondi de l'analyse num\'erique~: on remplace $w \in \R$ par $q \in \{0,\ldots,255\}$ via une application affine. L'erreur est born\'ee par $s/2 \approx 0.004$ pour des poids dans $[-1,1]$, soit $\sim 0.4\%$ d'erreur relative. La taille du mod\`ele est divis\'ee par~4.
+\end{intubox}
+
+\subsection{Test-Time Augmentation}
+
+\begin{equation}
+  \boxed{\hat{\mathbf{y}}_{\text{TTA}} = \frac{1}{T} \sum_{t=1}^{T} f_\theta(\mathcal{A}_t(\mathbf{x}))}
+\end{equation}
+
+\begin{intubox}[Loi des grands nombres appliqu\'ee aux pr\'edictions]
+Si les $T=8$ pr\'edictions sont des estimateurs peu biais\'es, leur moyenne a une variance divis\'ee par $T$. L'\'ecart-type empirique fournit une estimation de l'\textbf{incertitude}~: un cas \`a haute incertitude est ambigu et n\'ecessite un examen humain.
+\end{intubox}
+
+%% ================================================================
+\section{\'Evaluation et m\'etriques}
+%% ================================================================
+
+\subsection{Pr\'ecision, rappel, F1}
+
+\begin{align}
+  \text{Pr\'ecision}_k = \frac{C_{kk}}{\sum_i C_{ik}}, \quad
+  \text{Rappel}_k = \frac{C_{kk}}{\sum_j C_{kj}}, \quad
+  F_1 = 2\,\frac{P \cdot R}{P + R}
+\end{align}
+
+\begin{intubox}[Pourquoi la moyenne harmonique~?]
+Elle p\'enalise les valeurs d\'es\'equilibr\'ees~: $\text{HM}(0.99, 0.01) = 0.02$, alors que la moyenne arithm\'etique donne $0.50$. Le $F_1$ force les deux m\'etriques \`a \^etre simultan\'ement bonnes. Lien~: in\'egalit\'e AM-HM $\text{HM}(a,b) \leq \sqrt{ab} \leq \frac{a+b}{2}$.
+\end{intubox}
+
+\subsection{AUC-ROC}
+
+\begin{intubox}[Interpr\'etation probabiliste]
+$\text{AUC} = P(f(\mathbf{x}^+) > f(\mathbf{x}^-))$~: probabilit\'e qu'un positif re\c{c}oive un score plus \'elev\'e qu'un n\'egatif. AUC $= 0.5$~: al\'eatoire. AUC $= 1.0$~: s\'eparation parfaite.
+\end{intubox}
+
+\subsection{ECE (Expected Calibration Error)}
+
+$\text{ECE} = \sum_{b=1}^{B} \frac{|S_b|}{N} |\text{acc}(S_b) - \text{conf}(S_b)|$
+
+\begin{intubox}[Calibration = honn\^etet\'e du mod\`ele]
+Un mod\`ele calibr\'e qui dit \og{}80\% de confiance\fg{} a raison 80\% du temps. Crucial en m\'edecine~: le radiologue doit pouvoir se fier au score.
+\end{intubox}
+
+%% ================================================================
+\section{Explicabilit\'e~: Grad-CAM}
+%% ================================================================
+
+Soit $A^k_{ij}$ les feature maps de la derni\`ere couche convolutive et $y^c$ le score de la classe $c$~:
+
+\begin{equation}
+  \alpha_k^c = \frac{1}{H'W'}\sum_{i,j} \frac{\partial y^c}{\partial A^k_{ij}}, \qquad
+  \boxed{L^c_{\text{Grad-CAM}}(i,j) = \ReLU\!\left(\sum_k \alpha_k^c \cdot A^k_{ij}\right)}
+\end{equation}
+
+\begin{intubox}[D\'ecryptage complet]
+\begin{enumerate}[leftmargin=1.5em]
+  \item Le gradient $\frac{\partial y^c}{\partial A^k_{ij}}$ mesure (r\`egle de cha\^ine, L1) combien le score de la classe $c$ change quand on perturbe le pixel $(i,j)$ de la feature map $k$.
+
+  \item La moyenne $\alpha_k^c$ est un GAP des gradients~: poids d'importance global du canal $k$.
+
+  \item $\sum_k \alpha_k^c A^k_{ij}$ est une \textbf{projection} dans la direction de la classe $c$ dans l'espace des features. Comme un produit scalaire $\langle \bm{\alpha}^c, \mathbf{A}_{ij} \rangle$.
+
+  \item La ReLU ne garde que les contributions positives (zones qui \emph{augmentent} le score).
+\end{enumerate}
+
+\textbf{R\'esum\'e}~: Grad-CAM montre \og{}o\`u le r\'eseau regarde\fg{} pour prendre sa d\'ecision.
+\end{intubox}
+
+%% ================================================================
+\section{R\'ecapitulatif des notations}
+%% ================================================================
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Symbole} & \textbf{Signification} \\
+\midrule
+$\mathbf{I} \in \R^{H \times W \times 3}$ & Image (tenseur d'ordre 3) \\
+$G_\sigma$ & Noyau gaussien 2D \\
+$*$ & Produit de convolution discret \\
+$K=5$ & Nombre de classes \\
+$p_t$ & Probabilit\'e de la classe correcte \\
+$\gamma$ & Param\`etre focal \\
+$\kappa$ & Quadratic Weighted Kappa \\
+$D_4$ & Groupe di\'edral (8 \'el\'ements) \\
+$\lambda \sim \text{Beta}(\alpha,\alpha)$ & Coefficient MixUp \\
+$\eta$ & Learning rate \\
+$\bm{\theta}$ & Param\`etres du mod\`ele \\
+$\mathbf{m}_t, \mathbf{v}_t$ & Moments AdamW \\
+$A^k_{ij}$ & Feature map canal $k$, position $(i,j)$ \\
+$\alpha_k^c$ & Poids Grad-CAM \\
+$\odot$ & Produit de Hadamard \\
+$\sigma$ & Sigmo\"ide $\frac{1}{1+e^{-x}}$ \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\vfill
+\begin{center}
+\textcolor{accent}{\rule{0.5\textwidth}{0.5pt}}\\[0.5em]
+\textit{Fin du document --- Fondements math\'ematiques et algorithmiques}
+\end{center}
+
+\end{document}
